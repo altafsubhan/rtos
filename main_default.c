@@ -1,7 +1,8 @@
 /*
  * Default main.c for rtos lab.
- * @author Andrew Morton, 2018
+ * @author Subhan and Susan, 2018
  */
+
 #include <LPC17xx.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,18 +36,25 @@ typedef void (*rtosTaskFunc_t)(void *args);
 
 void PendSV_Handler(){
 	uint8_t i = 0;
+	// find running task
 	while (tcbList[i].state != running) {
 		i++;
 	}
 	
+	// find next ready task
 	uint8_t j = i;
 	while (tcbList[j].state != ready) {
 		j = (j+1)%6;
 	}
 	
-	tcbList[i].taskSP = storeContext();
+	// store registers to stack
+	tcbList[i].taskSP = storeContext();	  
+
+	// change states
 	tcbList[i].state = ready;
 	tcbList[j].state = running;
+
+	// push new task's stack contents to registers
 	restoreContext(tcbList[j].taskSP);
 }
 
@@ -77,6 +85,8 @@ void init(void){
 
 uint8_t createTask(rtosTaskFunc_t funcPtr, void * args) {
 	int i = 1;
+
+	// find next empty stack
 	while(tcbList[i].taskSP != tcbList[i].taskBase) {
 		i++;
 		if (i >= 6)
@@ -87,7 +97,6 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args) {
 	tcbList[i].state = ready;
 	
 	// PSR
-	//tcbList[i].taskSP -= 3;
 	tcbList[i].taskSP -= 4;
 	*((uint32_t *)tcbList[i].taskSP) = (uint32_t)0x01000000;
 	
@@ -110,7 +119,6 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args) {
 		tcbList[i].taskSP -= 4;
 		*((uint32_t *)tcbList[i].taskSP) = (uint32_t)0x00;
 	}
-	//tcbList[i].taskSP += 4;
 	
 	return 1;
 }
