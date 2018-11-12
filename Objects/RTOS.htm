@@ -3,11 +3,11 @@
 <title>Static Call Graph - [.\Objects\RTOS.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image .\Objects\RTOS.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060528: Last Updated: Sun Nov 11 21:06:54 2018
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060528: Last Updated: Sun Nov 11 23:20:50 2018
 <BR><P>
-<H3>Maximum Stack Usage =         16 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
+<H3>Maximum Stack Usage =         36 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
-PendSV_Handler
+__rt_entry_main &rArr; main &rArr; init
 <P>
 <H3>
 Functions with no stack information
@@ -194,7 +194,7 @@ Global Symbols
 <P><STRONG><a name="[6c]"></a>__rt_entry_postsh_1</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, __rtentry2.o(.ARM.Collect$$rtentry$$00000009))
 
 <P><STRONG><a name="[3f]"></a>__rt_entry_main</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, __rtentry2.o(.ARM.Collect$$rtentry$$0000000D))
-<BR><BR>[Stack]<UL><LI>Max Depth = 16 + Unknown Stack Size
+<BR><BR>[Stack]<UL><LI>Max Depth = 36 + Unknown Stack Size
 <LI>Call Chain = __rt_entry_main &rArr; main &rArr; init
 </UL>
 <BR>[Calls]<UL><LI><a href="#[41]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;exit
@@ -416,7 +416,7 @@ Global Symbols
 
 <P><STRONG><a name="[73]"></a>__user_perthread_libspace</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, libspace.o(.text), UNUSED)
 
-<P><STRONG><a name="[c]"></a>PendSV_Handler</STRONG> (Thumb, 90 bytes, Stack size 16 bytes, main_default.o(i.PendSV_Handler))
+<P><STRONG><a name="[c]"></a>PendSV_Handler</STRONG> (Thumb, 98 bytes, Stack size 16 bytes, main_default.o(i.PendSV_Handler))
 <BR><BR>[Stack]<UL><LI>Max Depth = 16<LI>Call Chain = PendSV_Handler
 </UL>
 <BR>[Calls]<UL><LI><a href="#[49]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;restoreContext
@@ -431,7 +431,7 @@ Global Symbols
 <BR><BR>[Called By]<UL><LI><a href="#[44]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__rt_exit_exit
 </UL>
 
-<P><STRONG><a name="[33]"></a>sayHi</STRONG> (Thumb, 10 bytes, Stack size 0 bytes, main_default.o(i.sayHi))
+<P><STRONG><a name="[33]"></a>sayHi</STRONG> (Thumb, 8 bytes, Stack size 0 bytes, main_default.o(i.sayHi))
 <BR>[Address Reference Count : 1]<UL><LI> main_default.o(i.main)
 </UL>
 <P><STRONG><a name="[31]"></a>SystemInit</STRONG> (Thumb, 302 bytes, Stack size 0 bytes, system_lpc17xx.o(i.SystemInit))
@@ -459,8 +459,8 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[40]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 
-<P><STRONG><a name="[40]"></a>main</STRONG> (Thumb, 182 bytes, Stack size 0 bytes, main_default.o(i.main))
-<BR><BR>[Stack]<UL><LI>Max Depth = 16<LI>Call Chain = main &rArr; init
+<P><STRONG><a name="[40]"></a>main</STRONG> (Thumb, 148 bytes, Stack size 20 bytes, main_default.o(i.main))
+<BR><BR>[Stack]<UL><LI>Max Depth = 36<LI>Call Chain = main &rArr; init
 </UL>
 <BR>[Calls]<UL><LI><a href="#[4a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;init
 <LI><a href="#[4b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;createTask

@@ -46,8 +46,8 @@ void PendSV_Handler(){
 	
 	tcbList[i].taskSP = storeContext();
 	tcbList[i].state = ready;
-	restoreContext(tcbList[1].taskSP);
-	tcbList[1].state = running;
+	tcbList[j].state = running;
+	restoreContext(tcbList[j].taskSP);
 }
 
 void init(void){	
@@ -87,7 +87,8 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args) {
 	tcbList[i].state = ready;
 	
 	// PSR
-	tcbList[i].taskSP -= 3;
+	//tcbList[i].taskSP -= 3;
+	tcbList[i].taskSP -= 4;
 	*((uint32_t *)tcbList[i].taskSP) = (uint32_t)0x01000000;
 	
 	// PC
@@ -123,11 +124,11 @@ void delay(uint8_t time){
 
 void sayHi(void* s){
 	//printf("Hello %s", s);
-	while (true) {
+	//while (true) {
 		//LPC_GPIO2->FIOCLR = 1 << 6;
 		//delay(5);
 		LPC_GPIO2->FIOSET = 1 << 6;
-	}
+	//}
 }
 
 
@@ -147,16 +148,18 @@ int main(void) {
 	char *s = "Susan";
 	createTask(p, s);
 	
-	uint32_t period = 1000; // 1s
-	uint32_t next = -period;
-	while(true) {
+	LPC_GPIO2->FIOSET = 1 << 4;
+	
+	//uint32_t period = 1000; // 1s
+	//uint32_t next = -period;
+	/*while(true) {
 		if(msTicks - next >= period) {
 			LPC_GPIO2->FIOSET = 1 << 4;
 			next += period;
 		} else {
 			LPC_GPIO2->FIOCLR = 1 << 4;
 		}
-	}
+	}*/
 	
 	/*
 	uint32_t test = 5;

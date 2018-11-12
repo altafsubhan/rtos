@@ -13,7 +13,6 @@ Section Cross References
     main_default.o(i.main) refers to main_default.o(i.createTask) for createTask
     main_default.o(i.main) refers to system_lpc17xx.o(.data) for SystemCoreClock
     main_default.o(i.main) refers to main_default.o(i.sayHi) for sayHi
-    main_default.o(i.main) refers to main_default.o(.data) for msTicks
     retarget.o(i._ttywrch) refers to retarget.o(i.sendchar) for sendchar
     retarget.o(i.fgetc) refers to retarget.o(i.getkey) for getkey
     retarget.o(i.fgetc) refers to retarget.o(i.sendchar) for sendchar
@@ -329,9 +328,9 @@ Image Symbol Table
     .text                                    0x00000208   Section        0  exit.o(.text)
     .text                                    0x0000021c   Section        8  libspace.o(.text)
     i.PendSV_Handler                         0x00000224   Section        0  main_default.o(i.PendSV_Handler)
-    i.SysTick_Handler                        0x00000284   Section        0  main_default.o(i.SysTick_Handler)
-    i._sys_exit                              0x000002a4   Section        0  retarget.o(i._sys_exit)
-    i.sayHi                                  0x000002a8   Section        0  main_default.o(i.sayHi)
+    i.SysTick_Handler                        0x0000028c   Section        0  main_default.o(i.SysTick_Handler)
+    i._sys_exit                              0x000002ac   Section        0  retarget.o(i._sys_exit)
+    i.sayHi                                  0x000002b0   Section        0  main_default.o(i.sayHi)
     .ARM.__at_0x02FC                         0x000002fc   Section        4  startup_lpc17xx.o(.ARM.__at_0x02FC)
     i.SystemInit                             0x00000300   Section        0  system_lpc17xx.o(i.SystemInit)
     i.UART0_IRQHandler                       0x00000440   Section        0  uart.o(i.UART0_IRQHandler)
@@ -486,18 +485,18 @@ Image Symbol Table
     __user_libspace                          0x0000021d   Thumb Code     8  libspace.o(.text)
     __user_perproc_libspace                  0x0000021d   Thumb Code     0  libspace.o(.text)
     __user_perthread_libspace                0x0000021d   Thumb Code     0  libspace.o(.text)
-    PendSV_Handler                           0x00000225   Thumb Code    90  main_default.o(i.PendSV_Handler)
-    SysTick_Handler                          0x00000285   Thumb Code    24  main_default.o(i.SysTick_Handler)
-    _sys_exit                                0x000002a5   Thumb Code     4  retarget.o(i._sys_exit)
-    sayHi                                    0x000002a9   Thumb Code    10  main_default.o(i.sayHi)
-    Region$$Table$$Base                      0x000002b8   Number         0  anon$$obj.o(Region$$Table)
-    Region$$Table$$Limit                     0x000002d8   Number         0  anon$$obj.o(Region$$Table)
+    PendSV_Handler                           0x00000225   Thumb Code    98  main_default.o(i.PendSV_Handler)
+    SysTick_Handler                          0x0000028d   Thumb Code    24  main_default.o(i.SysTick_Handler)
+    _sys_exit                                0x000002ad   Thumb Code     4  retarget.o(i._sys_exit)
+    sayHi                                    0x000002b1   Thumb Code     8  main_default.o(i.sayHi)
+    Region$$Table$$Base                      0x000002bc   Number         0  anon$$obj.o(Region$$Table)
+    Region$$Table$$Limit                     0x000002dc   Number         0  anon$$obj.o(Region$$Table)
     SystemInit                               0x00000301   Thumb Code   302  system_lpc17xx.o(i.SystemInit)
     UART0_IRQHandler                         0x00000441   Thumb Code    88  uart.o(i.UART0_IRQHandler)
     UART1_IRQHandler                         0x000004a9   Thumb Code    90  uart.o(i.UART1_IRQHandler)
     createTask                               0x00000519   Thumb Code   230  main_default.o(i.createTask)
     init                                     0x00000605   Thumb Code   160  main_default.o(i.init)
-    main                                     0x000006a9   Thumb Code   182  main_default.o(i.main)
+    main                                     0x000006a9   Thumb Code   148  main_default.o(i.main)
     msTicks                                  0x10000000   Data           4  main_default.o(.data)
     ITM_RxBuffer                             0x10000004   Data           4  uart.o(.data)
     UART0Status                              0x10000008   Data           4  uart.o(.data)
@@ -526,9 +525,9 @@ Memory Map of the image
 
   Image Entry point : 0x0000017d
 
-  Load Region LR_1 (Base: 0x00000000, Size: 0x000007a8, Max: 0xffffffff, ABSOLUTE)
+  Load Region LR_1 (Base: 0x00000000, Size: 0x00000780, Max: 0xffffffff, ABSOLUTE)
 
-    Execution Region ER_RO (Exec base: 0x00000000, Load base: 0x00000000, Size: 0x00000780, Max: 0xffffffff, ABSOLUTE)
+    Execution Region ER_RO (Exec base: 0x00000000, Load base: 0x00000000, Size: 0x00000758, Max: 0xffffffff, ABSOLUTE)
 
     Exec Addr    Load Addr    Size         Type   Attr      Idx    E Section Name        Object
 
@@ -587,31 +586,31 @@ Memory Map of the image
     0x00000208   0x00000208   0x00000012   Code   RO          380    .text               c_w.l(exit.o)
     0x0000021a   0x0000021a   0x00000002   PAD
     0x0000021c   0x0000021c   0x00000008   Code   RO          392    .text               c_w.l(libspace.o)
-    0x00000224   0x00000224   0x00000060   Code   RO           23    i.PendSV_Handler    main_default.o
-    0x00000284   0x00000284   0x00000020   Code   RO           24    i.SysTick_Handler   main_default.o
-    0x000002a4   0x000002a4   0x00000004   Code   RO          114    i._sys_exit         retarget.o
-    0x000002a8   0x000002a8   0x00000010   Code   RO           29    i.sayHi             main_default.o
-    0x000002b8   0x000002b8   0x00000020   Data   RO          515    Region$$Table       anon$$obj.o
-    0x000002d8   0x000002d8   0x00000024   PAD
+    0x00000224   0x00000224   0x00000068   Code   RO           23    i.PendSV_Handler    main_default.o
+    0x0000028c   0x0000028c   0x00000020   Code   RO           24    i.SysTick_Handler   main_default.o
+    0x000002ac   0x000002ac   0x00000004   Code   RO          114    i._sys_exit         retarget.o
+    0x000002b0   0x000002b0   0x0000000c   Code   RO           29    i.sayHi             main_default.o
+    0x000002bc   0x000002bc   0x00000020   Data   RO          515    Region$$Table       anon$$obj.o
+    0x000002dc   0x000002dc   0x00000020   PAD
     0x000002fc   0x000002fc   0x00000004   Code   RO          301    .ARM.__at_0x02FC    startup_lpc17xx.o
     0x00000300   0x00000300   0x00000140   Code   RO          312    i.SystemInit        system_lpc17xx.o
     0x00000440   0x00000440   0x00000068   Code   RO          187    i.UART0_IRQHandler  uart.o
     0x000004a8   0x000004a8   0x00000070   Code   RO          188    i.UART1_IRQHandler  uart.o
     0x00000518   0x00000518   0x000000ec   Code   RO           25    i.createTask        main_default.o
     0x00000604   0x00000604   0x000000a4   Code   RO           27    i.init              main_default.o
-    0x000006a8   0x000006a8   0x000000d8   Code   RO           28    i.main              main_default.o
+    0x000006a8   0x000006a8   0x000000b0   Code   RO           28    i.main              main_default.o
 
 
-    Execution Region ER_RW (Exec base: 0x10000000, Load base: 0x00000780, Size: 0x00000028, Max: 0xffffffff, ABSOLUTE)
+    Execution Region ER_RW (Exec base: 0x10000000, Load base: 0x00000758, Size: 0x00000028, Max: 0xffffffff, ABSOLUTE)
 
     Exec Addr    Load Addr    Size         Type   Attr      Idx    E Section Name        Object
 
-    0x10000000   0x00000780   0x00000004   Data   RW           31    .data               main_default.o
-    0x10000004   0x00000784   0x00000020   Data   RW          197    .data               uart.o
-    0x10000024   0x000007a4   0x00000004   Data   RW          313    .data               system_lpc17xx.o
+    0x10000000   0x00000758   0x00000004   Data   RW           31    .data               main_default.o
+    0x10000004   0x0000075c   0x00000020   Data   RW          197    .data               uart.o
+    0x10000024   0x0000077c   0x00000004   Data   RW          313    .data               system_lpc17xx.o
 
 
-    Execution Region ER_ZI (Exec base: 0x10000028, Load base: 0x000007a8, Size: 0x00002140, Max: 0xffffffff, ABSOLUTE)
+    Execution Region ER_ZI (Exec base: 0x10000028, Load base: 0x00000780, Size: 0x00002140, Max: 0xffffffff, ABSOLUTE)
 
     Exec Addr    Load Addr    Size         Type   Attr      Idx    E Section Name        Object
 
@@ -630,16 +629,16 @@ Image component sizes
       Code (inc. data)   RO Data    RW Data    ZI Data      Debug   Object Name
 
         20          0          0          0          0       4880   context.o
-       760         64          0          4         96      51979   main_default.o
+       724         56          0          4         96      51903   main_default.o
          4          0          0          0          0        376   retarget.o
         64         26        204          0       8192        964   startup_lpc17xx.o
        320         18          0          4          0        771   system_lpc17xx.o
        216         38          0         32        128      18835   uart.o
 
     ----------------------------------------------------------------------
-      1384        146        272         40       8416      77805   Object Totals
+      1348        138        268         40       8416      77729   Object Totals
          0          0         32          0          0          0   (incl. Generated)
-         0          0         36          0          0          0   (incl. Padding)
+         0          0         32          0          0          0   (incl. Padding)
 
     ----------------------------------------------------------------------
 
@@ -683,15 +682,15 @@ Image component sizes
 
       Code (inc. data)   RO Data    RW Data    ZI Data      Debug   
 
-      1648        158        272         40       8512      77781   Grand Totals
-      1648        158        272         40       8512      77781   ELF Image Totals
-      1648        158        272         40          0          0   ROM Totals
+      1612        150        268         40       8512      77757   Grand Totals
+      1612        150        268         40       8512      77757   ELF Image Totals
+      1612        150        268         40          0          0   ROM Totals
 
 ==============================================================================
 
-    Total RO  Size (Code + RO Data)                 1920 (   1.88kB)
+    Total RO  Size (Code + RO Data)                 1880 (   1.84kB)
     Total RW  Size (RW Data + ZI Data)              8552 (   8.35kB)
-    Total ROM Size (Code + RO Data + RW Data)       1960 (   1.91kB)
+    Total ROM Size (Code + RO Data + RW Data)       1920 (   1.88kB)
 
 ==============================================================================
 
