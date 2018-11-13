@@ -102,7 +102,7 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args) {
 	
 	// PC
 	tcbList[i].taskSP -= 4;
-	*((uint32_t *)tcbList[i].taskSP) = *(uint32_t *)funcPtr;
+	*((uint32_t *)tcbList[i].taskSP) = (uint32_t)funcPtr;
 
 	// LR to R1
 	for (uint8_t x = 0; x < 5; x++) {
@@ -123,22 +123,15 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args) {
 	return 1;
 }
 
-void delay(uint8_t time){
-	for (uint8_t y = 0; y < time; y++){
-		for (uint32_t i = 0; i < (100); i++) {
-		}
+void task_1(void* s){
+	// blink LED 6
+	while(1) {
+		LPC_GPIO2->FIOSET = 1 << 6;
+		for(int i=0; i<12000000; i++);
+		LPC_GPIO2->FIOCLR = 1 << 6;
+		for(int i=0; i<12000000; i++);
 	}
 }
-
-void sayHi(void* s){
-	//printf("Hello %s", s);
-	//while (true) {
-		//LPC_GPIO2->FIOCLR = 1 << 6;
-		//delay(5);
-		LPC_GPIO2->FIOSET = 1 << 6;
-	//}
-}
-
 
 int main(void) {
 	//initialize all LEDs
@@ -149,30 +142,20 @@ int main(void) {
 	LPC_GPIO2->FIOCLR |= 0x0000007C;
 	LPC_GPIO1->FIOCLR |= ((uint32_t)11<<28);
 
+	// initialize systick
 	SysTick_Config(SystemCoreClock/1000);
-	init();
+	init();		// initialize stack for each task
 	
-	rtosTaskFunc_t p = &sayHi;
-	char *s = "Susan";
+	// create new task
+	rtosTaskFunc_t p = task_1;
+	char *s = "test_param";
 	createTask(p, s);
 	
-	LPC_GPIO2->FIOSET = 1 << 4;
-	
-	//uint32_t period = 1000; // 1s
-	//uint32_t next = -period;
-	/*while(true) {
-		if(msTicks - next >= period) {
-			LPC_GPIO2->FIOSET = 1 << 4;
-			next += period;
-		} else {
-			LPC_GPIO2->FIOCLR = 1 << 4;
-		}
-	}*/
-	
-	/*
-	uint32_t test = 5;
-	uint32_t test2 = 6;
-	printf("%p, %p\n", &test, &test2);*/
-	//printf("%d, %p, %d, %p\n", test, &test, test2, &test2);
-	
+	// blink LED 4
+	while(1) {
+		LPC_GPIO2->FIOSET = 1 << 4;
+		for(int i=0; i<12000000; i++);
+		LPC_GPIO2->FIOCLR = 1 << 4;
+		for(int i=0; i<12000000; i++);
+	}
 }
