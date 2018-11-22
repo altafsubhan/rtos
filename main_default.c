@@ -13,50 +13,175 @@
 uint32_t msTicks = 0;
 
 void SysTick_Handler(void) {
-    msTicks++;
-	  SCB->ICSR |= (0x01 << 28);
+	msTicks++;
+	
+	SCB->ICSR |= (0x01 << 28);
 }
+
+enum priorities{
+		idleDemon,
+		low,
+		belowNormal,
+		normal,
+		aTeeeeensyBitAmountAboveNormal,
+		superDuperImportant
+} priority;
+
+enum states{
+		inactive,
+		waiting,
+		ready,
+		running
+} state;
 
 typedef struct {
 	uint8_t taskID;
 	uint32_t taskBase;
 	uint32_t taskSP;
 	
-	enum states{
-		inactive,
-		waiting,
-		ready,
-		running
-	} state;
+	uint8_t priority;
+	uint8_t state;
 	
 } TCB_t;
 
+typedef struct node {
+	TCB_t * task;
+	struct node* next;
+} node_t;
+
+typedef struct queue {
+	node_t * head;
+	uint8_t size;
+} queue_t;
+
+void enqueue(queue_t * list, node_t * toAdd) {
+	node_t * listNode = list->head;
+	while (listNode->next != NULL) {
+		listNode = listNode->next;
+	}
+	listNode->next = toAdd;
+	toAdd->next = NULL;
+	list->size++;
+}	
+
+queue_t priorityQ[7];
+void initializeQ() {
+		for (int i = 0; i < 7; i++){
+			priorityQ[i].head = NULL;
+			priorityQ[i].size = 0;
+		}
+}
+
+void removeTCB(TCB_t * taskToRun) {
+	queue_t * list = &priorityQ[taskToRun->priority];
+	
+	// if head element
+	if (list->head->task == taskToRun){
+		list->head = list->head->next;
+		list->size--;
+		return;
+	}
+	
+	// h -> ** -> ** -> ** -> ** -> ** -> 0
+
+	// If middle  or last element
+	node_t * iter = list->head;
+	while (iter->next != NULL) {
+		if (iter->next->task == taskToRun) {
+				iter->next = iter->next->next;
+				list->size--;
+				return;
+		}
+		iter = iter->next;
+	}
+}
+
+node_t * dequeue(queue_t * list) {
+	node_t * currNode = list->head;
+	list->head = list->head->next;
+	list->size--;
+	return currNode;
+}
+
+TCB_t * getTaskToRun() {
+	uint8_t i = 5;
+	while (i >= 0) {
+			if (priorityQ[i].size > 0){
+			node_t * iter = priorityQ[i].head;
+			while (iter->task->state != ready && iter->next != NULL) {
+				iter = iter->next;
+			}
+			if (iter->task->state == ready)
+				return iter->task;
+			i--;
+		}
+	}
+}
+
 TCB_t tcbList[6]; 
+node_t * runningTask;
 typedef void (*rtosTaskFunc_t)(void *args);
 
-void PendSV_Handler(){
-	uint8_t i = 0;
-	// find running task
-	while (tcbList[i].state != running) {
-		i++;
+typedef struct {
+	int32_t s;
+	queue_t * waitList;
+}  sem_t;
+
+void initSem(sem_t * sem, int32_t count){
+	sem->s = count;
+	sem->waitList->head = NULL;
+	sem->waitList->size = 0;
+}
+
+void wait(sem_t * sem){
+	__disable_irq();
+	sem->s--;
+	if (!(sem->s >= 0)) {
+		enqueue(sem->waitList, runningTask);
+		runningTask->task->state = waiting;
 	}
-	
-	// find next ready task
-	uint8_t j = i;
-	while (tcbList[j].state != ready) {
-		j = (j+1)%6;
+	__enable_irq();
+}
+
+void signal(sem_t * sem){
+	__disable_irq();
+	sem->s++;
+	if (sem->s <= 0) {
+		node_t * toRun = dequeue(sem->waitList);
+		toRun->task->state = ready;
 	}
-	
+	__enable_irq();
+}
+
+// priority array of task queues
+// each queue has tasks 
+// determine highest priority
+// implement round-robin in that queue until depleted
+// 
+
+void switchContext(uint8_t a, uint8_t b) {
 	// store registers to stack
-	tcbList[i].taskSP = storeContext();	  
+	tcbList[a].taskSP = storeContext();	  
 
 	// change states
-	tcbList[i].state = ready;
-	tcbList[j].state = running;
+	if (tcbList[a].state == running)
+		tcbList[a].state = ready;
+	tcbList[b].state = running;
 
 	// push new task's stack contents to registers
-	restoreContext(tcbList[j].taskSP);
+	restoreContext(tcbList[b].taskSP);
 }
+
+void PendSV_Handler(){
+	TCB_t * nextTask = getTaskToRun();
+	removeTCB(nextTask);
+	enqueue(&priorityQ[runningTask->task->priority], runningTask);
+	uint8_t prevRunning = runningTask->task->taskID;
+	runningTask->task = nextTask;
+	
+	switchContext(prevRunning, runningTask->task->taskID);
+}
+
 
 void init(void){	
 	// initialize TCBs
@@ -78,12 +203,15 @@ void init(void){
 	tcbList[0].taskSP = tcbList[0].taskBase - (mainStackBase - mainSP);
 	tcbList[0].state = running;
 
+	runningTask->task = &tcbList[0];
+	runningTask->next = NULL;
+
 	__set_MSP(mainStackBase);
 	__set_CONTROL(__get_CONTROL() | SPBIT);
 	__set_PSP(tcbList[0].taskSP);
 }
 
-uint8_t createTask(rtosTaskFunc_t funcPtr, void * args) {
+uint8_t createTask(rtosTaskFunc_t funcPtr, void * args, uint8_t p) {
 	int i = 1;
 
 	// find next empty stack
@@ -119,6 +247,9 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args) {
 		tcbList[i].taskSP -= 4;
 		*((uint32_t *)tcbList[i].taskSP) = (uint32_t)0x00;
 	}
+	node_t * newNode;
+	newNode->task = &tcbList[i];
+	enqueue(&priorityQ[tcbList[i].priority], newNode);
 	
 	return 1;
 }
@@ -149,7 +280,7 @@ int main(void) {
 	// create new task
 	rtosTaskFunc_t p = task_1;
 	char *s = "test_param";
-	createTask(p, s);
+	createTask(p, s, idleDemon);
 	
 	// blink LED 4
 	while(1) {
