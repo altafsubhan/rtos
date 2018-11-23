@@ -11,14 +11,15 @@
 
 #define SPBIT 0x02
 uint32_t msTicks = 0;
+uint8_t bitVector = 0;
 
 void SysTick_Handler(void) {
 	msTicks++;
 	
-	SCB->ICSR |= (0x01 << 28);
+	SCB->ICSR |= (0x01 << 28); // triggering pendSV_Handler
 }
 
-enum priorities{
+enum priorities{ // priorities of different tasks
 		idleDemon,
 		low,
 		belowNormal,
@@ -27,14 +28,14 @@ enum priorities{
 		superDuperImportant
 } priority;
 
-enum states{
+enum states{ // states of the different tasks
 		inactive,
 		waiting,
 		ready,
 		running
 } state;
 
-typedef struct {
+typedef struct { // task control block
 	uint8_t taskID;
 	uint32_t taskBase;
 	uint32_t taskSP;
@@ -44,7 +45,7 @@ typedef struct {
 	
 } TCB_t;
 
-typedef struct node {
+typedef struct node { 
 	TCB_t * task;
 	struct node* next;
 } node_t;
@@ -65,35 +66,12 @@ void enqueue(queue_t * list, node_t * toAdd) {
 }	
 
 queue_t priorityQ[7];
+
 void initializeQ() {
 		for (int i = 0; i < 7; i++){
 			priorityQ[i].head = NULL;
 			priorityQ[i].size = 0;
 		}
-}
-
-void removeTCB(TCB_t * taskToRun) {
-	queue_t * list = &priorityQ[taskToRun->priority];
-	
-	// if head element
-	if (list->head->task == taskToRun){
-		list->head = list->head->next;
-		list->size--;
-		return;
-	}
-	
-	// h -> ** -> ** -> ** -> ** -> ** -> 0
-
-	// If middle  or last element
-	node_t * iter = list->head;
-	while (iter->next != NULL) {
-		if (iter->next->task == taskToRun) {
-				iter->next = iter->next->next;
-				list->size--;
-				return;
-		}
-		iter = iter->next;
-	}
 }
 
 node_t * dequeue(queue_t * list) {
@@ -103,24 +81,46 @@ node_t * dequeue(queue_t * list) {
 	return currNode;
 }
 
-TCB_t * getTaskToRun() {
-	uint8_t i = 5;
-	while (i >= 0) {
-			if (priorityQ[i].size > 0){
-			node_t * iter = priorityQ[i].head;
-			while (iter->task->state != ready && iter->next != NULL) {
-				iter = iter->next;
-			}
-			if (iter->task->state == ready)
-				return iter->task;
-			i--;
-		}
+node_t * removeTCB(TCB_t * taskToDel) {
+	queue_t * list = &priorityQ[taskToDel->priority];
+	node_t * temp;
+	
+	// if head element
+	if (list->head->task == taskToDel){
+		temp = list->head;
+		list->head = list->head->next;
+		list->size--;
+		return temp;
 	}
+	
+	// h -> ** -> ** -> ** -> ** -> ** -> 0
+
+	// If middle  or last element
+	node_t * iter = list->head;
+	while (iter->next != NULL) {
+		if (iter->next->task == taskToDel) {
+				temp = iter->next;
+				iter->next = iter->next->next;
+				list->size--;
+				return temp;
+		}
+		iter = iter->next;
+	}
+}
+
+uint8_t highestPriorityQ() {
+	//assembly commands intrinsics?????? O(1) time!!!!!!!!!!
+	uint8_t leadingZeros = 0;
+	__ASM ("CLZ %[result], %[bitV]"
+	: [result] "=r" (leadingZeros)
+	: [bitV] "r" (bitVector));
+	return (7 - leadingZeros);
 }
 
 TCB_t tcbList[6]; 
 node_t * runningTask;
 typedef void (*rtosTaskFunc_t)(void *args);
+
 
 typedef struct {
 	int32_t s;
@@ -136,28 +136,70 @@ void initSem(sem_t * sem, int32_t count){
 void wait(sem_t * sem){
 	__disable_irq();
 	sem->s--;
-	if (!(sem->s >= 0)) {
-		enqueue(sem->waitList, runningTask);
-		runningTask->task->state = waiting;
+	if (sem->s <= 0) { // if no more tasks can access semaphore
+		enqueue(sem->waitList, runningTask); //current task gets added to semaphore's waitlist
+		runningTask->task->state = waiting; // current task's status goes from running to waiting
 	}
+	// does this task now need to stop running? how to make it stop?
 	__enable_irq();
 }
 
 void signal(sem_t * sem){
 	__disable_irq();
 	sem->s++;
-	if (sem->s <= 0) {
-		node_t * toRun = dequeue(sem->waitList);
+	if (sem->s <= 0) { // if there are still tasks in the waitlist
+		node_t * toRun = dequeue(sem->waitList); // dequeue one task from waitlist
+		enqueue(&priorityQ[toRun->task->priority], toRun); // enqueue that task back to ready queues
 		toRun->task->state = ready;
 	}
 	__enable_irq();
 }
 
-// priority array of task queues
-// each queue has tasks 
-// determine highest priority
-// implement round-robin in that queue until depleted
-// 
+typedef struct {
+	int32_t s;
+	queue_t * waitList;
+	uint8_t owner;
+	uint8_t oldPriority;
+}  mutex_t;
+
+void initMutex(mutex_t * mutex, int32_t count){
+	mutex->s = count;
+	mutex->waitList->head = NULL;
+	mutex->waitList->size = 0;
+}
+
+void lock(mutex_t * mutex){
+	__disable_irq();
+	if (mutex->s){
+		mutex->s--; // task locks mutex
+		mutex->owner = runningTask->task->taskID; // set owner of mutex
+		mutex->oldPriority = tcbList[mutex->owner].priority;
+	}
+	else if (!(mutex->s)){ // mutex is 0, or locked by another task
+		if (runningTask->task->priority > tcbList[mutex->owner].priority){
+			node_t * updatedPriorityTask = removeTCB(&tcbList[mutex->owner]);
+			enqueue(&priorityQ[runningTask->task->priority], updatedPriorityTask);
+			tcbList[mutex->owner].priority = runningTask->task->priority; // set priority of task with mutex to be equal as waiting task
+		}
+		enqueue(mutex->waitList, runningTask); // add the running task to mutex's waitlist
+		runningTask->task->state = waiting; // set task's status to waiting
+	}
+	__enable_irq();
+}
+
+void release(mutex_t * mutex, uint8_t taskID){
+	__disable_irq();
+	if (mutex->owner == taskID){ // owner test on release
+		if (runningTask->task->priority != mutex->oldPriority) {
+			runningTask->task->priority = mutex->oldPriority;
+		}
+		mutex->s++;	// allow owner of mutex to release
+		node_t * toRun = dequeue(mutex->waitList); // remove task from mutex's waitlist
+		enqueue(&priorityQ[toRun->task->priority], toRun); // enqueue task back to ready queue
+		toRun->task->state = ready; // set task's status back to ready
+	}
+	__enable_irq();
+}
 
 void switchContext(uint8_t a, uint8_t b) {
 	// store registers to stack
@@ -173,12 +215,11 @@ void switchContext(uint8_t a, uint8_t b) {
 }
 
 void PendSV_Handler(){
-	TCB_t * nextTask = getTaskToRun();
-	removeTCB(nextTask);
+	uint8_t nextQ = highestPriorityQ();
+	node_t * taskToRun = dequeue(&priorityQ[nextQ]);
 	enqueue(&priorityQ[runningTask->task->priority], runningTask);
 	uint8_t prevRunning = runningTask->task->taskID;
-	runningTask->task = nextTask;
-	
+	runningTask->task = taskToRun->task;
 	switchContext(prevRunning, runningTask->task->taskID);
 }
 
@@ -203,6 +244,7 @@ void init(void){
 	tcbList[0].taskSP = tcbList[0].taskBase - (mainStackBase - mainSP);
 	tcbList[0].state = running;
 
+	// setting running task node to task main
 	runningTask->task = &tcbList[0];
 	runningTask->next = NULL;
 
@@ -223,6 +265,9 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args, uint8_t p) {
 	
 	// set it to ready to run
 	tcbList[i].state = ready;
+	
+	// set task's priority 
+	tcbList[i].priority = p;
 	
 	// PSR
 	tcbList[i].taskSP -= 4;
@@ -247,9 +292,12 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args, uint8_t p) {
 		tcbList[i].taskSP -= 4;
 		*((uint32_t *)tcbList[i].taskSP) = (uint32_t)0x00;
 	}
+	
+	// create a new node for the task
 	node_t * newNode;
 	newNode->task = &tcbList[i];
 	enqueue(&priorityQ[tcbList[i].priority], newNode);
+	bitVector |= 1 << tcbList[i].priority;
 	
 	return 1;
 }
