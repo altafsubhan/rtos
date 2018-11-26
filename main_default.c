@@ -7,15 +7,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "context.h"
 
+// for setting stack pointer bit
 #define SPBIT 0x02
+
 uint32_t msTicks = 0;
 uint8_t bitVector = 0;
 
+// triggers context switch every 1 ms
 void SysTick_Handler(void) {
 	msTicks++;
-	
 	SCB->ICSR |= (0x01 << 28); // triggering pendSV_Handler
 }
 
@@ -43,166 +46,187 @@ typedef struct { // task control block
 	uint8_t priority;
 	uint8_t state;
 	
+	// pointer to next TCB in queue
+	struct TCB * next;
 } TCB_t;
 
-typedef struct node { 
-	TCB_t * task;
-	struct node* next;
-} node_t;
-
-typedef struct queue {
-	node_t * head;
+typedef struct queue {	// implement queues for scheduler
+	TCB_t * head;
 	uint8_t size;
 } queue_t;
 
-void enqueue(queue_t * list, node_t * toAdd) {
-	node_t * listNode = list->head;
-	while (listNode->next != NULL) {
-		listNode = listNode->next;
-	}
-	listNode->next = toAdd;
-	toAdd->next = NULL;
-	list->size++;
-}	
+queue_t priorityQ[6];	// queues for each priority level
 
-queue_t priorityQ[7];
-
-void initializeQ() {
-		for (int i = 0; i < 7; i++){
+void initializeQ() {	// for initializing each queue
+		for (int i = 0; i < 6; i++){
 			priorityQ[i].head = NULL;
 			priorityQ[i].size = 0;
 		}
 }
 
-node_t * dequeue(queue_t * list) {
-	node_t * currNode = list->head;
-	list->head = list->head->next;
-	list->size--;
-	return currNode;
-}
-
-node_t * removeTCB(TCB_t * taskToDel) {
-	queue_t * list = &priorityQ[taskToDel->priority];
-	node_t * temp;
-	
-	// if head element
-	if (list->head->task == taskToDel){
-		temp = list->head;
-		list->head = list->head->next;
-		list->size--;
-		return temp;
-	}
-	
-	// h -> ** -> ** -> ** -> ** -> ** -> 0
-
-	// If middle  or last element
-	node_t * iter = list->head;
-	while (iter->next != NULL) {
-		if (iter->next->task == taskToDel) {
-				temp = iter->next;
-				iter->next = iter->next->next;
-				list->size--;
-				return temp;
+// adds TCB node to end of queue
+void enqueue(queue_t * list, TCB_t * toAdd) {
+	if (list->size)	{	// if queue is not empty
+		TCB_t * listNode = list->head;
+		// find end of queue
+		while (listNode->next != NULL) {
+			listNode = listNode->next;
 		}
-		iter = iter->next;
+		listNode->next = toAdd;	// add TCB to end
+	} else {	// if queue is empty
+		bitVector |= 1<<toAdd->priority;  // update bit vector
+		list->head = toAdd;		// add TCB to queue
 	}
+	toAdd->next = NULL;
+	list->size++;	// update size
 }
 
+TCB_t * dequeue(queue_t * list) {	// removes TCB from front of queue
+	TCB_t * currNode = list->head;	// store first TCB
+	list->head = list->head->next;	// update head
+	list->size--;		// update size
+	if (!list->size)	// update bit vector if queue becomes empty
+		bitVector &= ~(1<<currNode->priority);
+	return currNode;	// return saved TCB
+}
+
+// removes specific TCB from queue, used for priority inheritance in mutex
+TCB_t * removeTCB(TCB_t * taskToDel) {
+	// get the corresponding queue from task
+	queue_t * list = &priorityQ[taskToDel->priority];
+	TCB_t * temp;
+	
+	// if removing first TCB
+	if (list->head->taskID == taskToDel->taskID){
+		return dequeue(list);
+	}
+
+	// If removing middle  or last TCB
+	TCB_t * iter = list->head;
+
+	while (iter->next != NULL) {
+		// find TCB in the queue
+		if (iter->next->taskID == taskToDel->taskID) {
+				temp = iter->next;	// store TCB to remove
+				iter->next = iter->next->next;	// update queue
+				list->size--;	// update size
+				return temp;	// return stored TCB
+		}
+		iter = iter->next;	// iterate through list until TCB found
+	}
+	return temp;	// return empty TCB node if not found in queue
+}
+
+// gets index of non-empty queue with highest priority
 uint8_t highestPriorityQ() {
-	//assembly commands intrinsics?????? O(1) time!!!!!!!!!!
 	uint8_t leadingZeros = 0;
-	__ASM ("CLZ %[result], %[bitV]"
-	: [result] "=r" (leadingZeros)
-	: [bitV] "r" (bitVector));
-	return (7 - leadingZeros);
+	// intrinsic assembly command to get leading zeros in bit vector
+	leadingZeros = __clz(bitVector);	
+	return (31 - leadingZeros);
 }
 
-TCB_t tcbList[6]; 
-node_t * runningTask;
+TCB_t tcbList[6]; 	// declare six task control blocks
+TCB_t * runningTask;	// keep track of running task
 typedef void (*rtosTaskFunc_t)(void *args);
 
-
-typedef struct {
+typedef struct {	// implement semaphores
 	int32_t s;
 	queue_t * waitList;
 }  sem_t;
 
-void initSem(sem_t * sem, int32_t count){
-	sem->s = count;
+void initSem(sem_t * sem, int32_t count){	// initialize semaphore
+	// initialize semaphore count
+	sem->s = count;		
+	// initialize wait list
 	sem->waitList->head = NULL;
 	sem->waitList->size = 0;
 }
 
-void wait(sem_t * sem){
-	__disable_irq();
-	sem->s--;
+void wait(sem_t * sem){		// to acquire semaphore
+	__disable_irq();	// disable interrupts
+	sem->s--;	// decrement semaphore count
 	if (sem->s <= 0) { // if no more tasks can access semaphore
-		enqueue(sem->waitList, runningTask); //current task gets added to semaphore's waitlist
-		runningTask->task->state = waiting; // current task's status goes from running to waiting
+		//current task gets added to semaphore's waitlist
+		enqueue(sem->waitList, runningTask); 
+		// current task's status goes from running to waiting
+		runningTask->state = waiting; 
 	}
-	// does this task now need to stop running? how to make it stop?
-	__enable_irq();
+	__enable_irq();		// enable interrupts
 }
 
-void signal(sem_t * sem){
+void signal(sem_t * sem){	// to release semaphore
 	__disable_irq();
-	sem->s++;
+	sem->s++;	// increment semaphore count
 	if (sem->s <= 0) { // if there are still tasks in the waitlist
-		node_t * toRun = dequeue(sem->waitList); // dequeue one task from waitlist
-		enqueue(&priorityQ[toRun->task->priority], toRun); // enqueue that task back to ready queues
-		toRun->task->state = ready;
+		// dequeue one task from waitlist
+		TCB_t * toRun = dequeue(sem->waitList); 
+		// enqueue that task back to ready queue
+		enqueue(&priorityQ[toRun->priority], toRun); 
+		toRun->state = ready;		// update state
 	}
 	__enable_irq();
 }
 
-typedef struct {
+typedef struct {	// implement mutexes
 	int32_t s;
 	queue_t * waitList;
 	uint8_t owner;
 	uint8_t oldPriority;
 }  mutex_t;
 
-void initMutex(mutex_t * mutex, int32_t count){
-	mutex->s = count;
+void initMutex(mutex_t * mutex){	// initialize mutex
+	// initialize count and wait list
+	mutex->s = 0x01;
 	mutex->waitList->head = NULL;
 	mutex->waitList->size = 0;
 }
 
-void lock(mutex_t * mutex){
+void lock(mutex_t * mutex){		// to acquire mutex
 	__disable_irq();
-	if (mutex->s){
-		mutex->s--; // task locks mutex
-		mutex->owner = runningTask->task->taskID; // set owner of mutex
+	if (mutex->s){		// if mutex is available
+		mutex->s--; // decrement count - lock mutex
+		mutex->owner = runningTask->taskID; // set owner of mutex
+		// save owner's priority for priority inheritance
 		mutex->oldPriority = tcbList[mutex->owner].priority;
 	}
 	else if (!(mutex->s)){ // mutex is 0, or locked by another task
-		if (runningTask->task->priority > tcbList[mutex->owner].priority){
-			node_t * updatedPriorityTask = removeTCB(&tcbList[mutex->owner]);
-			enqueue(&priorityQ[runningTask->task->priority], updatedPriorityTask);
-			tcbList[mutex->owner].priority = runningTask->task->priority; // set priority of task with mutex to be equal as waiting task
+		// check if task requesting mutex has higher priority than owner
+		if (runningTask->priority > tcbList[mutex->owner].priority){
+			// raise priority of owner to that of waiting task
+			TCB_t * updatedPriorityTask = removeTCB(&tcbList[mutex->owner]);
+			enqueue(&priorityQ[runningTask->priority], updatedPriorityTask);
+			tcbList[mutex->owner].priority = runningTask->priority; 
 		}
-		enqueue(mutex->waitList, runningTask); // add the running task to mutex's waitlist
-		runningTask->task->state = waiting; // set task's status to waiting
+		// check that requesting task is not the owner
+		if (runningTask->taskID != mutex->owner){
+			// add running task to mutex's waitlist and update task's state
+			enqueue(mutex->waitList, runningTask); 
+			runningTask->state = waiting;
+		}
 	}
 	__enable_irq();
 }
 
-void release(mutex_t * mutex, uint8_t taskID){
+void release(mutex_t * mutex){	// to release mutex
 	__disable_irq();
-	if (mutex->owner == taskID){ // owner test on release
-		if (runningTask->task->priority != mutex->oldPriority) {
-			runningTask->task->priority = mutex->oldPriority;
+	if (mutex->owner == runningTask->taskID){ // owner test on release
+		// check if owner's priority was temporarily raised
+		if (runningTask->priority != mutex->oldPriority) {
+			// restore original priority
+			runningTask->priority = mutex->oldPriority;	
 		}
-		mutex->s++;	// allow owner of mutex to release
-		node_t * toRun = dequeue(mutex->waitList); // remove task from mutex's waitlist
-		enqueue(&priorityQ[toRun->task->priority], toRun); // enqueue task back to ready queue
-		toRun->task->state = ready; // set task's status back to ready
+		mutex->s++;	// increment count - release mutex
+		
+		// remove first task from wait list and add to ready queue
+		TCB_t * toRun = dequeue(mutex->waitList);
+		enqueue(&priorityQ[toRun->priority], toRun);
+		toRun->state = ready; // update task's state
 	}
 	__enable_irq();
 }
 
-void switchContext(uint8_t a, uint8_t b) {
-	// store registers to stack
+void switchContext(uint8_t a, uint8_t b) {	// performs context switch
+	// store registers for running task to stack
 	tcbList[a].taskSP = storeContext();	  
 
 	// change states
@@ -214,17 +238,27 @@ void switchContext(uint8_t a, uint8_t b) {
 	restoreContext(tcbList[b].taskSP);
 }
 
-void PendSV_Handler(){
-	uint8_t nextQ = highestPriorityQ();
-	node_t * taskToRun = dequeue(&priorityQ[nextQ]);
-	enqueue(&priorityQ[runningTask->task->priority], runningTask);
-	uint8_t prevRunning = runningTask->task->taskID;
-	runningTask->task = taskToRun->task;
-	switchContext(prevRunning, runningTask->task->taskID);
+void PendSV_Handler(){	// invoked for context switches
+	// get index of highest priority non-empty queue
+	uint8_t nextQ = highestPriorityQ();	
+
+	// if next queue is lower priority than running task - no context switch
+	if (nextQ >= runningTask->priority) {
+		// get next ready task in queue
+		TCB_t * taskToRun = dequeue(&priorityQ[nextQ]);
+
+		// add running task back to queue (unless waiting for semaphore)
+		if (runningTask->state != waiting)
+			enqueue(&priorityQ[runningTask->priority], runningTask);
+
+		// switch context between running task and next task
+		uint8_t prevRunning = runningTask->taskID;
+		runningTask = taskToRun;
+		switchContext(prevRunning, runningTask->taskID);
+	}
 }
 
-
-void init(void){	
+void init(void){	// initialize stack
 	// initialize TCBs
 	uint32_t * vectorTable = 0x0;
 	uint32_t mainStackBase = vectorTable[0];
@@ -243,9 +277,10 @@ void init(void){
 	}
 	tcbList[0].taskSP = tcbList[0].taskBase - (mainStackBase - mainSP);
 	tcbList[0].state = running;
+	tcbList[0].priority = idleDemon;
 
 	// setting running task node to task main
-	runningTask->task = &tcbList[0];
+	runningTask = &tcbList[0];
 	runningTask->next = NULL;
 
 	__set_MSP(mainStackBase);
@@ -294,21 +329,77 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args, uint8_t p) {
 	}
 	
 	// create a new node for the task
-	node_t * newNode;
-	newNode->task = &tcbList[i];
+	TCB_t * newNode = &tcbList[i];
 	enqueue(&priorityQ[tcbList[i].priority], newNode);
-	bitVector |= 1 << tcbList[i].priority;
+	//bitVector |= 1 << tcbList[i].priority;
 	
 	return 1;
 }
 
-void task_1(void* s){
-	// blink LED 6
+mutex_t mtx;
+
+void task_4(void* s) {	// blink all LEDs
 	while(1) {
+		lock(&mtx);
+		LPC_GPIO2->FIOCLR |= 0x0000007C;
+		for(int i=0; i<12000000; i++);
+		LPC_GPIO2->FIOSET |= 0x0000007C;
+		release(&mtx);
+		for(int i=0; i<12000000; i++);
+	}
+}
+
+void task_1(void* s){	// blink LED 6
+	while(1) {
+		lock(&mtx);
+		printf("task_1");
 		LPC_GPIO2->FIOSET = 1 << 6;
 		for(int i=0; i<12000000; i++);
 		LPC_GPIO2->FIOCLR = 1 << 6;
+		release(&mtx);
 		for(int i=0; i<12000000; i++);
+	}
+}
+
+void task_2(void* s){	// blink LED 5
+	while(1) {
+		lock(&mtx);
+		printf("task_2");
+		LPC_GPIO2->FIOSET = 1 << 5;
+		for(int i=0; i<12000000; i++);
+		LPC_GPIO2->FIOCLR = 1 << 5;
+		release(&mtx);
+		for(int i=0; i<12000000; i++);
+	}
+}
+
+void task_3(void* s){	// blink LED 4
+	uint8_t count = 0;
+	while(1) {
+		lock(&mtx);
+		printf("task_2");
+		LPC_GPIO2->FIOSET = 1 << 4;
+		for(int i=0; i<12000000; i++);
+		LPC_GPIO2->FIOCLR = 1 << 4;
+		release(&mtx);
+		for(int i=0; i<12000000; i++);
+		count++;
+
+		if (count == 5) {
+			lock(&mtx);
+			tosTaskFunc_t p4 = task_4;
+			createTask(p4, s, superDuperImportant);
+		}
+
+		if (count >= 5) {
+			for (uint8_t itr = 0; itr < 5; itr++){
+				LPC_GPIO2->FIOSET = 1 << 4;
+				for(int i=0; i<12000000; i++);
+				LPC_GPIO2->FIOCLR = 1 << 4;
+				release(&mtx);
+				for(int i=0; i<12000000; i++);
+			}
+		}
 	}
 }
 
@@ -321,20 +412,27 @@ int main(void) {
 	LPC_GPIO2->FIOCLR |= 0x0000007C;
 	LPC_GPIO1->FIOCLR |= ((uint32_t)11<<28);
 
-	// initialize systick
+	// initialize systick, stack, queues, mutex
 	SysTick_Config(SystemCoreClock/1000);
-	init();		// initialize stack for each task
+	init();		
+	initializeQ();
+	initMutex(&mtx);
 	
-	// create new task
-	rtosTaskFunc_t p = task_1;
+	// create new tasks
+	rtosTaskFunc_t p1 = task_1;
 	char *s = "test_param";
-	createTask(p, s, idleDemon);
+	createTask(p1, s, normal);
 	
-	// blink LED 4
-	while(1) {
-		LPC_GPIO2->FIOSET = 1 << 4;
+	rtosTaskFunc_t p2 = task_2;
+	createTask(p2, s, normal);
+	
+	rtosTaskFunc_t p3 = task_3;
+	createTask(p3, s, normal);
+	
+	while(1) {		// blink LED 2
+		LPC_GPIO2->FIOSET = 1 << 2;
 		for(int i=0; i<12000000; i++);
-		LPC_GPIO2->FIOCLR = 1 << 4;
+		LPC_GPIO2->FIOCLR = 1 << 2;
 		for(int i=0; i<12000000; i++);
 	}
 }
