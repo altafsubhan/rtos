@@ -15,6 +15,7 @@
 
 uint32_t msTicks = 0;
 uint8_t bitVector = 0;
+uint8_t highPriority = 0;
 
 // triggers context switch every 1 ms
 void SysTick_Handler(void) {
@@ -233,6 +234,10 @@ void release(mutex_t * mutex){	// to release mutex
 			mutex->owner = toRun->taskID;
 			mutex->s--;
 			mutex->oldPriority = toRun->priority;
+
+			// if priority inheritance needed, raise priority
+			if (toRun->priority < highPriority)
+				toRun->priority = highPriority;
 			
 			printf("enqueued task %d and assigned mutex to task %d; ", toRun->taskID, mutex->owner);
 		}
@@ -319,6 +324,10 @@ uint8_t createTask(rtosTaskFunc_t funcPtr, void * args, uint8_t p) {
 	
 	// set task's priority 
 	tcbList[i].priority = p;
+
+	// update high priority
+	if (p > highPriority)
+		highPriority = p;
 	
 	// PSR
 	tcbList[i].taskSP -= 4;
@@ -417,7 +426,7 @@ void task_3(void* s){	// blink LED 4
 	while(1) {
 		lock(&mtx);
 		__disable_irq();
-		printf("task_2_started\n");
+		printf("task_3_started\n");
 		__enable_irq();
 		LPC_GPIO2->FIOSET = 1 << 4;
 		for(int i=0; i<12000000; i++);
